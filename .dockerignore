@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv
+venv
+env
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Tests
+backend_tests/
+tests/
+
+# Data files
+data/
+datasets/
+*.csv
+*.parquet
+*.db
+*.sqlite
+
+# IDE
+.vscode
+.idea
+
+# Documentation
+docs/
+
+# OS
+.DS_Store
