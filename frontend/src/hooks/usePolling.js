@@ -1,27 +1,40 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-export function usePolling(fetchFn, interval = 5000, immediate = true) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+/**
+ * Polls an async fetch function at a given interval.
+ * - Skips a tick if the previous fetch is still in-flight (prevents pile-up).
+ * - Surfaces both data and error so callers can render both.
+ * - Returns a stable `refetch` function for manual refresh.
+ */
+export function usePolling(fetchFn, interval = 5000, { immediate = true } = {}) {
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(immediate);
+  const [error,   setError]   = useState(null);
+  const inFlight = useRef(false);
 
-  const fetch = useCallback(async () => {
+  const run = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
       const result = await fetchFn();
-      if (result !== null) setData(result);
-      setError(null);
+      // Only update data if we got something back (don't clobber on transient nulls)
+      if (result !== null && result !== undefined) {
+        setData(result);
+        setError(null);
+      }
     } catch (e) {
-      setError(e.message);
+      setError(e?.message ?? 'Unknown error');
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }, [fetchFn]);
 
   useEffect(() => {
-    if (immediate) fetch();
-    const timer = setInterval(fetch, interval);
+    if (immediate) run();
+    const timer = setInterval(run, interval);
     return () => clearInterval(timer);
-  }, [fetch, interval, immediate]);
+  }, [run, interval, immediate]);
 
-  return { data, loading, error, refetch: fetch };
+  return { data, loading, error, refetch: run };
 }
