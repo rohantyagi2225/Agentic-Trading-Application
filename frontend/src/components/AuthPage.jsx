@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
+import { api } from "../services/api";
 
 const PASSWORD_HINTS = [
   "At least 8 characters",
@@ -9,11 +10,14 @@ const PASSWORD_HINTS = [
 
 export default function AuthPage({ mode = "login", onSubmit }) {
   const isSignup = mode === "signup";
-  const [email, setEmail] = useState(isSignup ? "" : "trader01@agentic.dev");
+  const [params] = useSearchParams();
+  const registeredEmail = params.get("email") ?? "";
+  const [email, setEmail] = useState(isSignup ? "" : registeredEmail || "trader01@agentic.dev");
   const [password, setPassword] = useState(isSignup ? "" : "Trader@123");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState(params.get("registered") === "1" ? `Account created for ${registeredEmail || "your email"}. Verify it before logging in.` : "");
   const [loading, setLoading] = useState(false);
 
   const validationError = useMemo(() => {
@@ -48,6 +52,19 @@ export default function AuthPage({ mode = "login", onSubmit }) {
     }
   };
 
+  const resendVerification = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.resendVerification(email.trim());
+      setNotice(result.message ?? "Verification email sent");
+    } catch (err) {
+      setError(err?.message ?? "Unable to resend verification");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4">
       <div className="w-full max-w-5xl grid lg:grid-cols-[1.1fr,0.9fr] rounded-3xl overflow-hidden border border-zinc-800 bg-zinc-900/70 shadow-2xl shadow-cyan-950/20">
@@ -56,14 +73,14 @@ export default function AuthPage({ mode = "login", onSubmit }) {
           <h1 className="text-4xl font-light tracking-tight">{isSignup ? "Start your demo trading workspace." : "Access your trading workspace."}</h1>
           <p className="text-zinc-400 mt-4 max-w-xl">
             {isSignup
-              ? "Create your user profile, get demo credits, explore AI trading agents, and practice without risking real money."
-              : "Sign in to continue your learning path, monitor signals, and manage your practice portfolio."}
+              ? "Create your user profile, then verify your email before signing in."
+              : "Sign in after verification to continue your learning path, monitor signals, and manage your practice portfolio."}
           </p>
 
           <div className="grid sm:grid-cols-3 gap-3 mt-8">
             {[
               ["Demo Credits", "$100,000 default balance for guided practice trades."],
-              ["Agent Briefings", "Understand what each agent will do before using it."],
+              ["Email Verification", "New accounts must verify their email before access is granted."],
               ["Live Practice", "Practice against live prices while keeping capital simulated."],
             ].map(([title, body]) => (
               <div key={title} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -81,50 +98,33 @@ export default function AuthPage({ mode = "login", onSubmit }) {
           </div>
 
           {isSignup && (
-            <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3"
-              placeholder="Display name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
+            <input className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3" placeholder="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           )}
 
-          <input
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            type="password"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <input className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="password" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
 
           {isSignup && (
             <>
-              <input
-                type="password"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <input type="password" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3" placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3 text-sm text-zinc-400">
-                {PASSWORD_HINTS.map((hint) => (
-                  <div key={hint}>{hint}</div>
-                ))}
+                {PASSWORD_HINTS.map((hint) => <div key={hint}>{hint}</div>)}
               </div>
             </>
           )}
 
+          {notice && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">{notice}</div>}
           {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
 
           <button disabled={loading} className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50">
             {loading ? "Please wait..." : isSignup ? "Create Account" : "Login"}
           </button>
+
+          {!isSignup && (
+            <button type="button" disabled={loading || !email.trim()} onClick={resendVerification} className="w-full rounded-lg border border-zinc-700 px-4 py-3 text-zinc-300 hover:border-cyan-500 hover:text-cyan-300 disabled:opacity-50">
+              Resend verification email
+            </button>
+          )}
 
           <div className="text-sm text-zinc-500">
             {isSignup ? "Already have an account?" : "Need an account?"}{" "}

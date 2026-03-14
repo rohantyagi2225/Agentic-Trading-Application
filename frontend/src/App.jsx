@@ -12,6 +12,7 @@ import Landing from "./pages/Landing";
 import Learn from "./pages/Learn";
 import Markets from "./pages/Markets";
 import MarketDetail from "./pages/MarketDetail";
+import VerifyEmail from "./pages/VerifyEmail";
 import { searchMarkets } from "./data/marketCatalog";
 import { api, getStoredUser } from "./services/api";
 
@@ -132,9 +133,8 @@ function Shell({ user, setUser }) {
   };
 
   const handleSignup = async ({ email, password, display_name }) => {
-    const registered = await api.register({ email, password, display_name });
-    setUser(registered);
-    navigate("/dashboard");
+    const result = await api.register({ email, password, display_name });
+    navigate(`/login?registered=1&email=${encodeURIComponent(result.email ?? email)}`);
   };
 
   const handleLogout = async () => {
@@ -153,6 +153,7 @@ function Shell({ user, setUser }) {
             <Route path="/learn" element={<Learn />} />
             <Route path="/markets" element={<Markets />} />
             <Route path="/markets/:symbol" element={<MarketDetail />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" onSubmit={handleLogin} />} />
             <Route path="/signup" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="signup" onSubmit={handleSignup} />} />
             <Route path="/dashboard" element={<ProtectedRoute user={user}><Dashboard /></ProtectedRoute>} />

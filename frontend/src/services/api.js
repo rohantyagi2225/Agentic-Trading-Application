@@ -58,6 +58,9 @@ async function request(path, options = {}) {
           const body = await response.json();
           message = body.detail || body.message || message;
         } catch {}
+        if (response.status === 401 || (response.status === 403 && /token|expired|bearer|inactive/i.test(message))) {
+          clearSession();
+        }
         if (attempt < retries && response.status >= 500) {
           continue;
         }
@@ -87,12 +90,10 @@ async function request(path, options = {}) {
 
 export const api = {
   register: async ({ email, password, display_name }) => {
-    const result = await request("/auth/register", {
+    return request("/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password, display_name }),
     });
-    setSession(result.token, result.user);
-    return result.user;
   },
 
   login: async (email, password) => {
@@ -117,6 +118,8 @@ export const api = {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     return user;
   },
+  verifyEmail: (token) => request("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: (email) => request("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) }),
 
   getHealth: () => request("/health"),
   getSignals: (symbol) => request(`/signals/${symbol}`),

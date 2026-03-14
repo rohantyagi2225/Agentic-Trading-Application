@@ -45,6 +45,9 @@ def ensure_sqlite_schema() -> None:
         "created_at",
         "is_demo_user",
         "is_active",
+        "email_verified",
+        "email_verification_token",
+        "verification_sent_at",
         "demo_balance",
         "preferences_json",
     }
@@ -81,6 +84,9 @@ def ensure_seed_users() -> None:
                     password_hash=password_hash,
                     is_demo_user=True,
                     is_active=True,
+                    email_verified=True,
+                    email_verification_token=None,
+                    verification_sent_at=None,
                     demo_balance=100000.0,
                     preferences_json="{}",
                 )
