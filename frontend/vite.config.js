@@ -5,17 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true,          // bind to 0.0.0.0 so Docker/remote works
+    strictPort: true,
+    host: '0.0.0.0',
     proxy: {
-      // REST: /api/* → http://localhost:8000/*
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      // WebSocket: /ws/* → ws://localhost:8000/ws/*
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://127.0.0.1:8000',
         ws: true,
         changeOrigin: true,
       },
@@ -27,6 +26,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+          charts: ['lightweight-charts', 'recharts'],
         },
       },
     },

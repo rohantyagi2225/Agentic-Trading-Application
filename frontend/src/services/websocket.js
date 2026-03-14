@@ -1,25 +1,45 @@
-const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+function resolveWsBase() {
+  const configured = import.meta.env.VITE_WS_URL;
+  if (configured) {
+    if (configured.startsWith('ws://') || configured.startsWith('wss://')) {
+      return configured.replace(/\/$/, '');
+    }
+    if (configured.startsWith('/')) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}${configured}`.replace(/\/$/, '');
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws`;
+  }
+
+  return 'ws://127.0.0.1:8000/ws';
+}
+
+const WS_BASE = resolveWsBase();
 
 export const WS_STATUS = {
-  IDLE:         'idle',
-  CONNECTING:   'connecting',
-  CONNECTED:    'connected',
+  IDLE: 'idle',
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
   DISCONNECTED: 'disconnected',
-  ERROR:        'error',
-  EXHAUSTED:    'exhausted',  // gave up after max retries
+  ERROR: 'error',
+  EXHAUSTED: 'exhausted',
 };
 
 export class SignalWebSocket {
   constructor(symbol, onMessage, onStatusChange) {
-    this.symbol        = symbol;
-    this.onMessage     = onMessage;
+    this.symbol = symbol;
+    this.onMessage = onMessage;
     this.onStatusChange = onStatusChange;
-    this.ws            = null;
+    this.ws = null;
     this.reconnectTimer = null;
-    this.attempts      = 0;
-    this.maxAttempts   = 8;
-    this.active        = true;
-    this._status       = WS_STATUS.IDLE;
+    this.attempts = 0;
+    this.maxAttempts = 8;
+    this.active = true;
+    this._status = WS_STATUS.IDLE;
   }
 
   _setStatus(s) {
@@ -29,46 +49,31 @@ export class SignalWebSocket {
 
   connect() {
     if (!this.active) return;
-    // Don't try to open a second socket while one is still OPEN or CONNECTING
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-
     this._setStatus(WS_STATUS.CONNECTING);
     try {
-      this.ws = new WebSocket(`${WS_BASE}/ws/signals/${this.symbol}`);
-    } catch (e) {
-      // WebSocket constructor can throw on totally invalid URLs
+      this.ws = new WebSocket(`${WS_BASE}/signals/${this.symbol}`);
+    } catch {
       this._setStatus(WS_STATUS.ERROR);
       this._scheduleReconnect();
       return;
     }
-
     this.ws.onopen = () => {
       this.attempts = 0;
       this._setStatus(WS_STATUS.CONNECTED);
     };
-
     this.ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        this.onMessage?.({ ...data, _receivedAt: Date.now() });
+        this.onMessage?.({ ...(data?.data || data), _receivedAt: Date.now() });
       } catch {
-        // Non-JSON frame — treat as a raw text signal
         this.onMessage?.({ raw: e.data, _receivedAt: Date.now() });
       }
     };
-
-    this.ws.onerror = (ev) => {
-      // onerror always fires just before onclose when the connection fails
-      this._setStatus(WS_STATUS.ERROR);
-    };
-
+    this.ws.onerror = () => this._setStatus(WS_STATUS.ERROR);
     this.ws.onclose = (ev) => {
       if (!this.active) return;
-      // 1000 = normal closure, 1001 = going away — no need to reconnect
-      if (ev.code === 1000 || ev.code === 1001) {
-        this._setStatus(WS_STATUS.DISCONNECTED);
-        return;
-      }
+      if (ev.code === 1000 || ev.code === 1001) { this._setStatus(WS_STATUS.DISCONNECTED); return; }
       this._setStatus(WS_STATUS.DISCONNECTED);
       this._scheduleReconnect();
     };
@@ -76,16 +81,12 @@ export class SignalWebSocket {
 
   _scheduleReconnect() {
     if (!this.active) return;
-    if (this.attempts >= this.maxAttempts) {
-      this._setStatus(WS_STATUS.EXHAUSTED);
-      return;
-    }
-    const delay = Math.min(500 * 2 ** this.attempts, 30_000); // 0.5s, 1s, 2s … 30s
+    if (this.attempts >= this.maxAttempts) { this._setStatus(WS_STATUS.EXHAUSTED); return; }
+    const delay = Math.min(500 * 2 ** this.attempts, 30000);
     this.attempts++;
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 
-  /** Force an immediate reconnect and reset the backoff counter */
   reconnect() {
     this.attempts = 0;
     clearTimeout(this.reconnectTimer);
@@ -97,8 +98,8 @@ export class SignalWebSocket {
     this.active = false;
     clearTimeout(this.reconnectTimer);
     if (this.ws) {
-      this.ws.onclose = null; // suppress the auto-reconnect inside onclose
-      this.ws.close(1000, 'component unmount');
+      this.ws.onclose = null;
+      this.ws.close(1000, 'unmount');
     }
   }
 }
