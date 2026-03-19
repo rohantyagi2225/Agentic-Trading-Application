@@ -1,4 +1,5 @@
 # Agentic Trading Application
+This project was collaboratively developed as part of a team effort to build a production-grade multi-agent trading system.
 
 A **production-grade multi-agent trading platform** that extends the research framework introduced in the Open Finance Lab project **AgenticTrading** into a deployable system with real-time APIs, streaming infrastructure, analytics, and a web dashboard.
 
@@ -327,11 +328,10 @@ This repository expands the research framework into a **production-oriented mult
 
 ---
 
-# Author
+##  Authors
 
-Ansh Gulati, Rohan Tyagi
-
-AI / Quant Systems Research
+Ansh Gulati — Core Development  
+Rohan Tyagi — Research, Documentation & System Analysis  
 
 ---
 
