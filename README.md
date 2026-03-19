@@ -332,3 +332,13 @@ This repository expands the research framework into a **production-oriented mult
 Ansh Gulati, Rohan Tyagi
 
 AI / Quant Systems Research
+
+---
+
+## My Contribution (Rohan Tyagi)
+
+- Contributed to project understanding and system design analysis  
+- Worked on documentation and structuring of the project  
+- Assisted in feature explanation and system workflow breakdown  
+- Collaborated with team members during development  
+
