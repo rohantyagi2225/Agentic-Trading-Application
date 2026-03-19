@@ -329,6 +329,6 @@ This repository expands the research framework into a **production-oriented mult
 
 # Author
 
-Ansh Gulati
+Ansh Gulati, Rohan Tyagi
 
 AI / Quant Systems Research
