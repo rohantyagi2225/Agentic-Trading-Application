@@ -44,22 +44,42 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
   const [ohlcv, setOhlcv] = useState([]);
   const [width, setWidth] = useState(0);
   const [hoverIndex, setHoverIndex] = useState(null);
+  const [usedFallback, setUsedFallback] = useState(false);
+  const loadTimeoutRef = useRef(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
+    setUsedFallback(false);
     try {
-      const response = await api.getOHLCV(symbol, period);
-      const next = normalizeSeries(response?.data || response?.history || []);
+      const timeoutPromise = new Promise((_, reject) => {
+        loadTimeoutRef.current = window.setTimeout(() => reject(new Error('timeout')), 8000);
+      });
+      const response = await Promise.race([api.getOHLCV(symbol, period), timeoutPromise]);
+      const rows =
+        response?.data?.prices ||
+        response?.prices ||
+        response?.history ||
+        [];
+      const next = normalizeSeries(rows);
       if (next.length) {
         setOhlcv(next);
       } else {
-        setOhlcv(normalizeSeries(getMockPriceHistory(symbol, PERIOD_TO_DAYS[period] || 30)));
+        const fallback = normalizeSeries(getMockPriceHistory(symbol, PERIOD_TO_DAYS[period] || 30));
+        setOhlcv(fallback);
+        setUsedFallback(true);
+        setError('Live chart unavailable. Showing fallback data.');
       }
     } catch {
-      setError('Live chart unavailable. Showing simulated history.');
-      setOhlcv(normalizeSeries(getMockPriceHistory(symbol, PERIOD_TO_DAYS[period] || 30)));
+      const fallback = normalizeSeries(getMockPriceHistory(symbol, PERIOD_TO_DAYS[period] || 30));
+      setOhlcv(fallback);
+      setUsedFallback(true);
+      setError('Live chart unavailable. Showing fallback data.');
     } finally {
+      if (loadTimeoutRef.current) {
+        window.clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
       setLoading(false);
     }
   }, [period, symbol]);
@@ -68,13 +88,14 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
     loadData();
   }, [loadData]);
 
+  // Auto-refresh only for very short periods, with longer intervals
   useEffect(() => {
-    const livePeriods = new Set(['1D', '1W', '1M']);
-    const refreshMs = period === '1D' ? 5000 : period === '1W' ? 10000 : 15000;
-    if (!livePeriods.has(period)) {
+    const shouldRefresh = period === '1D';
+    if (!shouldRefresh) {
       return undefined;
     }
 
+    const refreshMs = 30000; // 30 seconds instead of 5s to reduce load
     const timer = window.setInterval(() => {
       loadData();
     }, refreshMs);
@@ -83,13 +104,25 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+
     const updateWidth = () => {
-      setWidth(containerRef.current?.clientWidth || 0);
+      const newWidth = containerRef.current?.clientWidth || 0;
+      setWidth((prev) => (newWidth && newWidth !== prev ? newWidth : prev));
     };
+
     updateWidth();
-    const observer = new ResizeObserver(updateWidth);
+
+    let resizeTimeout;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(updateWidth, 120);
+    });
     observer.observe(containerRef.current);
-    return () => observer.disconnect();
+
+    return () => {
+      clearTimeout(resizeTimeout);
+      observer.disconnect();
+    };
   }, []);
 
   const chart = useMemo(() => {
@@ -150,6 +183,11 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
     };
   }, [height, ohlcv, width]);
 
+  // Reset hover index when chart data changes to prevent stale tooltips
+  useEffect(() => {
+    setHoverIndex(null);
+  }, [ohlcv, period]);
+
   const activePoint = chart && hoverIndex != null ? chart.points[hoverIndex] : chart?.points[chart.points.length - 1];
   const first = ohlcv[0];
   const last = ohlcv[ohlcv.length - 1];
@@ -192,7 +230,7 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
         </div>
       )}
 
-      <div ref={containerRef} className="relative w-full">
+      <div ref={containerRef} className="relative w-full overflow-hidden" style={{ height }}>
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-zinc-950/65">
             <div className="w-5 h-5 border-2 border-zinc-700 border-t-cyan-500 rounded-full animate-spin" />
@@ -201,7 +239,7 @@ export default function CandlestickChart({ symbol = 'AAPL', height = 320 }) {
 
         {!chart ? (
           <div className="flex items-center justify-center rounded-lg border border-zinc-800/70 bg-zinc-950/40 text-sm text-zinc-600" style={{ height }}>
-            Loading chart...
+            {usedFallback ? 'Rendering fallback data...' : 'Loading chart...'}
           </div>
         ) : (
           <div className="relative rounded-lg border border-zinc-800/70 bg-zinc-950/35 overflow-hidden" style={{ height }}>

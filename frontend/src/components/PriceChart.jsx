@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { api, getMockPriceHistory } from "../services/api";
 import { SYMBOLS } from "../data/marketCatalog";
 
@@ -18,27 +18,24 @@ const CHART_TYPES = [
   { id: "line", label: "Line" },
 ];
 
-function fallbackPointLabel(rangeLabel, index) {
-  if (rangeLabel === "15M") return `T-${(31 - index) * 15}m`;
-  if (rangeLabel === "1H") return `H-${47 - index}`;
-  if (rangeLabel === "4H") return `4H-${41 - index}`;
-  if (rangeLabel === "1D") return `M${index + 1}`;
-  if (rangeLabel === "1W") return `D${index + 1}`;
-  return `P${index + 1}`;
-}
+const RANGE_QUERY_MAP = {
+  "15M": { period: "1D", interval: "5m" },
+  "1H": { period: "1D", interval: "5m" },
+  "4H": { period: "1W", interval: "30m" },
+  "1D": { period: "1W", interval: "15m" },
+  "1W": { period: "1M", interval: "1h" },
+  "1M": { period: "1M", interval: "1d" },
+  "3M": { period: "3M", interval: "1d" },
+  "1Y": { period: "1Y", interval: "1wk" },
+};
 
-function fallbackHistory(symbol, rangeLabel, points) {
-  const dailyBase = getMockPriceHistory(symbol, Math.max(points, 60));
-  return dailyBase.slice(-points).map((row, index) => ({
-    ...row,
-    date: row?.date ?? fallbackPointLabel(rangeLabel, index),
-  }));
+function rangeToQuery(label) {
+  return RANGE_QUERY_MAP[label] || { period: "1M", interval: "1d" };
 }
 
 function normalizeCandles(rows, symbol, rangeLabel, points) {
-  const fallback = fallbackHistory(symbol, rangeLabel, points);
   if (!Array.isArray(rows) || rows.length === 0) {
-    return fallback;
+    return [];
   }
 
   const normalized = rows
@@ -50,7 +47,7 @@ function normalizeCandles(rows, symbol, rangeLabel, points) {
       if (!Number.isFinite(close) || close <= 0) return null;
 
       return {
-        date: row?.date ?? fallback[Math.min(index, fallback.length - 1)]?.date ?? fallbackPointLabel(rangeLabel, index),
+        date: row?.date ?? row?.label ?? row?.datetime ?? `P${index + 1}`,
         timestamp: row?.timestamp ?? Date.now() - (rows.length - index) * 3600000,
         open,
         high,
@@ -61,7 +58,7 @@ function normalizeCandles(rows, symbol, rangeLabel, points) {
     })
     .filter(Boolean);
 
-  return normalized.length > 1 ? normalized.slice(-points) : fallback;
+  return normalized.length > 1 ? normalized.slice(-points) : [];
 }
 
 export default function PriceChart({
@@ -74,9 +71,12 @@ export default function PriceChart({
   const [rangeLabel, setRangeLabel] = useState(defaultRange);
   const [chartType, setChartType] = useState("candle");
   const [hover, setHover] = useState(null);
-  const [data, setData] = useState(() => fallbackHistory(defaultSymbol, defaultRange, 78));
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [error, setError] = useState('');
+  const [usedFallback, setUsedFallback] = useState(false);
+  const loadTimeoutRef = useRef(null);
 
   const range = useMemo(
     () => RANGES.find((item) => item.label === rangeLabel) ?? RANGES[3],
@@ -85,7 +85,7 @@ export default function PriceChart({
 
   useEffect(() => {
     setSymbol(defaultSymbol);
-    setData(fallbackHistory(defaultSymbol, rangeLabel, range.points));
+    setData([]);
     setLastUpdated(null);
     setHover(null);
   }, [defaultSymbol]);
@@ -93,17 +93,40 @@ export default function PriceChart({
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const raw = await api.getMarketPrice(symbol, range.label).catch(() => null);
-      setData(normalizeCandles(raw?.history, symbol, range.label, range.points));
-      setLastUpdated(raw?.timestamp ?? new Date().toISOString());
+      setError('');
+      const { period, interval } = rangeToQuery(range.label);
+      const timeoutPromise = new Promise((_, reject) => {
+        loadTimeoutRef.current = window.setTimeout(() => reject(new Error('timeout')), 8000);
+      });
+      const raw = await Promise.race([api.getOHLCV(symbol, period, interval), timeoutPromise]);
+      const rows = raw?.data?.prices || raw?.prices || raw?.history || [];
+      const normalized = normalizeCandles(rows, symbol, range.label, range.points);
+      setData(normalized);
+      setLastUpdated(new Date().toISOString());
+      if (!normalized.length) {
+        const fallback = normalizeCandles(getMockPriceHistory(symbol, range.points), symbol, range.label, range.points);
+        setData(fallback);
+        setUsedFallback(true);
+        setError('No live data available. Showing fallback data.');
+      }
+    } catch {
+      const fallback = normalizeCandles(getMockPriceHistory(symbol, range.points), symbol, range.label, range.points);
+      setData(fallback);
+      setUsedFallback(true);
+      setError('Live chart unavailable. Showing fallback data.');
     } finally {
+      if (loadTimeoutRef.current) {
+        window.clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
       setLoading(false);
     }
   }, [symbol, range]);
 
   useEffect(() => {
-    setData(fallbackHistory(symbol, range.label, range.points));
+    setData([]);
     setHover(null);
+    setUsedFallback(false);
   }, [symbol, range.label, range.points]);
 
   useEffect(() => {
@@ -212,7 +235,13 @@ export default function PriceChart({
         </div>
       </div>
 
-      <div className="relative rounded-xl border border-zinc-800 bg-zinc-950/50 p-2">
+      {error && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] font-mono text-amber-300">
+          {error}
+        </div>
+      )}
+
+      <div className="relative rounded-xl border border-zinc-800 bg-zinc-950/50 p-2 overflow-hidden">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: H }} onMouseLeave={() => setHover(null)}>
           <defs>
             <linearGradient id={`lineGrad-${symbol}-${range.label}`} x1="0" y1="0" x2="0" y2="1">

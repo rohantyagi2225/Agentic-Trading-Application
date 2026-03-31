@@ -13,6 +13,7 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
     if (form.password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
@@ -34,7 +35,11 @@ export default function Signup() {
         },
       });
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      // Show user-friendly error message
+      const errorMessage = err.message?.includes('timed out') 
+        ? 'Server not reachable. Please ensure the backend is running.'
+        : err.message || 'Registration failed';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

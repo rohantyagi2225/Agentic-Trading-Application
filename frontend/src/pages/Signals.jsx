@@ -40,7 +40,7 @@ export default function Signals() {
     setRestError(null);
     try {
       const data = await api.getSignals(symbol);
-      setRestSignal(data);
+      setRestSignal(data?.data || data);
     } catch (e) {
       setRestError(e.message);
       setRestSignal(null);

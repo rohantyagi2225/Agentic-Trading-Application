@@ -4,9 +4,10 @@ import AssistantPanel from './components/AssistantPanel';
 import MarketPulseBar from './components/MarketPulseBar';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
-import Landing from './pages/Landing';
+import LandingPremium from './pages/LandingPremium';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -18,7 +19,7 @@ import Agents from './pages/Agents';
 import Profile from './pages/Profile';
 import VerifyEmail from './pages/VerifyEmail';
 
-// Pages that render their own navbar (full-page layouts)
+// Full page routes (no shared navbar)
 const FULL_PAGE_ROUTES = ['/', '/login', '/signup', '/verify-email'];
 
 function AppLayout() {
@@ -27,7 +28,6 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Show shared navbar on all pages except landing/auth */}
       {!isFullPage && (
         <>
           <Navbar />
@@ -38,7 +38,7 @@ function AppLayout() {
       <main className={isFullPage ? '' : 'max-w-[1820px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-7'}>
         <Routes>
           {/* Public */}
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<LandingPremium />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
@@ -47,7 +47,7 @@ function AppLayout() {
           <Route path="/learn" element={<Learn />} />
           <Route path="/agents" element={<Agents />} />
 
-          {/* Dashboard & Portfolio: accessible without auth, but richer when signed in */}
+          {/* Dashboard & Portfolio */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
@@ -71,7 +71,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppLayout />
+        <ErrorBoundary>
+          <AppLayout />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

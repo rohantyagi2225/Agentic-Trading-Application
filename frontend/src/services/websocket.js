@@ -1,4 +1,4 @@
-function resolveWsBase() {
+export function resolveWsBase() {
   const configured = import.meta.env.VITE_WS_URL;
   if (configured) {
     if (configured.startsWith('ws://') || configured.startsWith('wss://')) {
@@ -18,7 +18,7 @@ function resolveWsBase() {
   return 'ws://127.0.0.1:8000/ws';
 }
 
-const WS_BASE = resolveWsBase();
+export const WS_BASE = resolveWsBase();
 
 export const WS_STATUS = {
   IDLE: 'idle',

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { safeApi } from '../utils/safeApi';
 
 const AuthContext = createContext(null);
 
@@ -11,8 +11,14 @@ export function AuthProvider({ children }) {
   const fetchMe = useCallback(async (t) => {
     if (!t) { setLoading(false); return; }
     try {
-      const data = await api.getMe(t);
-      setUser(data);
+      const result = await safeApi.getMe(t);
+      if (result.success) {
+        setUser(result.data);
+      } else {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+      }
     } catch {
       localStorage.removeItem('token');
       setToken(null);
@@ -25,20 +31,26 @@ export function AuthProvider({ children }) {
   useEffect(() => { fetchMe(token); }, [fetchMe, token]);
 
   const login = useCallback(async (email, password) => {
-    const data = await api.login(email, password);
-    localStorage.setItem('token', data.access_token);
-    setToken(data.access_token);
-    setUser(data.user);
-    return data;
+    const result = await safeApi.login(email, password);
+    if (!result.success) {
+      throw new Error(result.error || 'Login failed');
+    }
+    localStorage.setItem('token', result.data.access_token);
+    setToken(result.data.access_token);
+    setUser(result.data.user);
+    return result.data;
   }, []);
 
   const register = useCallback(async (email, password, full_name) => {
-    const data = await api.register(email, password, full_name);
-    return data;
+    const result = await safeApi.register(email, password, full_name);
+    if (!result.success) {
+      throw new Error(result.error || 'Registration failed');
+    }
+    return result.data;
   }, []);
 
   const logout = useCallback(() => {
-    api.logout().catch(() => {});
+    safeApi.logout().catch(() => {});
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
