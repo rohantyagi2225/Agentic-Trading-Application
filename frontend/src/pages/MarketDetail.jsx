@@ -5,6 +5,52 @@ import { useAuth } from '../context/AuthContext';
 import { useSignalStream } from '../hooks/useSignalStream';
 import { WS_STATUS } from '../services/websocket';
 import CandlestickChart from '../components/CandlestickChart';
+import TradingViewChart from '../components/TradingViewChart';
+import ChartingFeaturesPanel from '../components/ChartingFeaturesPanel';
+
+function ChartTypeSelector() {
+  const [chartType, setChartType] = useState(() => localStorage.getItem('chartType') || 'tradingview');
+  
+  useEffect(() => {
+    localStorage.setItem('chartType', chartType);
+    // Dispatch custom event to notify chart change
+    window.dispatchEvent(new CustomEvent('chartTypeChange', { detail: { chartType } }));
+  }, [chartType]);
+
+  return (
+    <div className="flex items-center justify-between px-2 mb-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setChartType('tradingview')}
+          className={`text-[10px] font-mono uppercase tracking-wider px-3 py-1.5 rounded border transition-all ${
+            chartType === 'tradingview'
+              ? 'border-blue-600 text-blue-400 bg-blue-600/10'
+              : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          📊 TradingView Pro
+        </button>
+        <button
+          onClick={() => setChartType('legacy')}
+          className={`text-[10px] font-mono uppercase tracking-wider px-3 py-1.5 rounded border transition-all ${
+            chartType === 'legacy'
+              ? 'border-zinc-600 text-zinc-300 bg-zinc-800'
+              : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          🕯️ Simple Candles
+        </button>
+      </div>
+      
+      {chartType === 'tradingview' && (
+        <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Professional Charting Active
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SignalBadge({ signal }) {
   if (!signal) return null;
@@ -148,6 +194,8 @@ export default function MarketDetail() {
   const [loading, setLoading] = useState(true);
   const { messages, status } = useSignalStream(activeSymbol, 20);
 
+  const [chartType, setChartType] = useState(() => localStorage.getItem('chartType') || 'tradingview');
+
   const loadQuote = useCallback(async () => {
     setLoading(true);
     try {
@@ -171,6 +219,15 @@ export default function MarketDetail() {
   useEffect(() => {
     api.getSymbolInfo(activeSymbol).then((payload) => setInfo(payload?.data || payload)).catch(() => setInfo(null));
   }, [activeSymbol]);
+
+  // Listen for chart type changes
+  useEffect(() => {
+    const handleChartChange = (e) => {
+      setChartType(e.detail.chartType);
+    };
+    window.addEventListener('chartTypeChange', handleChartChange);
+    return () => window.removeEventListener('chartTypeChange', handleChartChange);
+  }, []);
 
   const price = priceData?.price;
   const change = priceData?.change;
@@ -248,12 +305,22 @@ export default function MarketDetail() {
 
       <div className="grid gap-5 2xl:grid-cols-[1.45fr_0.55fr]">
         <section className="space-y-5">
+          {/* Chart Type Selector */}
+          <ChartTypeSelector />
+
           <section className="panel p-5">
             <div className="panel-title">
               <span>Price Chart</span>
-              <span className="text-[10px] font-mono text-zinc-600">1D · 1W · 1M · 3M · 1Y</span>
+              <span className="text-[10px] font-mono text-zinc-600">
+                {chartType === 'tradingview' ? 'Advanced Technical Analysis' : 'Simple Candlestick'}
+              </span>
             </div>
-            <CandlestickChart symbol={activeSymbol} height={400} />
+            
+            {chartType === 'tradingview' ? (
+              <TradingViewChart symbol={activeSymbol} height={600} theme="dark" interval="D" />
+            ) : (
+              <CandlestickChart symbol={activeSymbol} height={400} />
+            )}
           </section>
 
           <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
@@ -345,6 +412,9 @@ export default function MarketDetail() {
               ))}
             </div>
           </section>
+
+          {/* TradingView Features Panel */}
+          <ChartingFeaturesPanel />
         </aside>
       </div>
     </div>

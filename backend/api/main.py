@@ -32,6 +32,7 @@ from backend.routes.market import router as market_router
 from backend.routes.profile import router as profile_router
 from backend.routes.ws_signals import router as ws_signals_router
 from backend.routes.signals import router as signals_router
+from backend.routes.research import router as research_router
 from backend.auth.jwt_handler import hash_password
 from backend.db.session import SessionLocal
 
@@ -134,6 +135,7 @@ app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 app.include_router(market_router, prefix="/market", tags=["Market"])
 app.include_router(health_router, tags=["Health"])
 app.include_router(ws_signals_router, prefix="/ws", tags=["WebSocket"])
+app.include_router(research_router)
 
 
 @app.get("/")

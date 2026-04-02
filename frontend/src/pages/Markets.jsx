@@ -41,6 +41,15 @@ const MARKET_GROUPS = [
   },
 ];
 
+function useDebouncedValue(value, delayMs = 400) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 function normalizeQuote(payload) {
   const quote = payload?.data || payload || {};
   const history = (quote.history || []).map((row) => Number(row.close ?? row.value ?? row.price)).filter(Number.isFinite);
@@ -121,6 +130,7 @@ export default function Markets() {
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
   const [quotes, setQuotes] = useState({});
+  const debouncedQuery = useDebouncedValue(query, 400);
 
   const trackedSymbols = useMemo(() => {
     const groupSymbols = MARKET_GROUPS.flatMap((section) => section.groups.flatMap((group) => group.symbols));
@@ -146,24 +156,28 @@ export default function Markets() {
   }, [trackedSymbols]);
 
   useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      const trimmed = query.trim();
-      if (!trimmed) {
-        setResults([]);
-        return;
-      }
+    const trimmed = debouncedQuery.trim();
+    if (!trimmed) {
+      setResults([]);
+      return;
+    }
 
+    let active = true;
+    (async () => {
       try {
         const response = await api.searchSymbols(trimmed);
-        const remote = response?.results || [];
+        const remote = response?.data?.results || response?.results || [];
         const local = searchMarkets(trimmed);
+        if (!active) return;
         setResults(Array.from(new Map([...local, ...remote].map((item) => [item.symbol, item])).values()).slice(0, 6));
       } catch {
+        if (!active) return;
         setResults(searchMarkets(trimmed).slice(0, 6));
       }
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [query]);
+    })();
+
+    return () => { active = false; };
+  }, [debouncedQuery]);
 
   useEffect(() => {
     loadQuotes();

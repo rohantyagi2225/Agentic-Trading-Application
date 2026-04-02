@@ -11,6 +11,16 @@ function makeMock(sym, prev) {
   return { price, change: +(price - (MOCK_BASES[sym] ?? price)).toFixed(2), changePct: delta / base };
 }
 
+function normalizeQuote(payload) {
+  const quote = payload?.data || payload || {};
+  return {
+    symbol: quote.symbol,
+    price: Number(quote.price),
+    change: Number(quote.change),
+    changePct: Number(quote.change_pct ?? quote.changePct),
+  };
+}
+
 export default function MarketTicker({ onSelectSymbol }) {
   const [prices,   setPrices]  = useState({});
   const [loading,  setLoading] = useState(true);
@@ -19,14 +29,14 @@ export default function MarketTicker({ onSelectSymbol }) {
 
   const fetchPrices = useCallback(async () => {
     const results = await Promise.allSettled(
-      SYMBOLS.map((sym) => api.getMarketPrice(sym).then((d) => [sym, d]))
+      SYMBOLS.map((sym) => api.getMarketPrice(sym).then((payload) => [sym, normalizeQuote(payload)]))
     );
     setPrices((old) => {
       const next = { ...old };
       results.forEach((r) => {
         if (r.status === 'fulfilled') {
           const [sym, data] = r.value;
-          next[sym] = data ?? makeMock(sym, old[sym]);
+          next[sym] = Number.isFinite(data?.price) ? data : makeMock(sym, old[sym]);
         } else {
           const sym = SYMBOLS[results.indexOf(r)];
           next[sym] = makeMock(sym, old[sym]);
@@ -71,7 +81,7 @@ export default function MarketTicker({ onSelectSymbol }) {
             ) : (
               <>
                 <span className="text-sm font-light tabular-nums text-zinc-100 mt-0.5">
-                  ${Number(p?.price ?? p ?? 0).toFixed(2)}
+                  ${Number(p?.price ?? 0).toFixed(2)}
                 </span>
                 {p?.change != null && (
                   <span className={`text-[10px] font-mono tabular-nums ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>

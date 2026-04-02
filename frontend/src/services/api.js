@@ -8,7 +8,21 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, options = {}, token = null) {
+const RETRYABLE_METHODS = new Set(['GET']);
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function normalizePayload(payload) {
+  if (payload && typeof payload === 'object') {
+    if ('data' in payload) return payload.data;
+    if (payload.status === 'success' && 'data' in payload) return payload.data;
+  }
+  return payload;
+}
+
+async function request(path, options = {}, token = null, attempt = 0) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   const headers = { 'Content-Type': 'application/json', ...options.headers };
@@ -24,15 +38,26 @@ async function request(path, options = {}, token = null) {
     if (!res.ok) {
       let errMsg = `HTTP ${res.status}`;
       try { const body = await res.json(); errMsg = body.detail || body.message || errMsg; } catch {}
+      const method = (options.method || 'GET').toUpperCase();
+      if (res.status >= 500 && RETRYABLE_METHODS.has(method) && attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS * (attempt + 1));
+        return request(path, options, token, attempt + 1);
+      }
       if (res.status === 401) {
         localStorage.removeItem('token');
       }
       throw new ApiError(res.status, errMsg);
     }
     const text = await res.text();
-    return text ? JSON.parse(text) : null;
+    const payload = text ? JSON.parse(text) : null;
+    return normalizePayload(payload);
   } catch (e) {
     clearTimeout(timeout);
+    const method = (options.method || 'GET').toUpperCase();
+    if ((e?.name === 'AbortError' || e?.message?.includes('Network')) && RETRYABLE_METHODS.has(method) && attempt < MAX_RETRIES) {
+      await sleep(RETRY_DELAY_MS * (attempt + 1));
+      return request(path, options, token, attempt + 1);
+    }
     if (e.name === 'AbortError') throw new ApiError(0, 'Request timed out');
     throw e;
   }
@@ -47,10 +72,7 @@ function authReq(path, options = {}) {
 }
 
 function unwrap(payload) {
-  if (payload && typeof payload === 'object' && 'data' in payload) {
-    return payload.data;
-  }
-  return payload;
+  return normalizePayload(payload);
 }
 
 export const api = {
@@ -69,7 +91,11 @@ export const api = {
 
   // Market
   getMarketPrice: (symbol) => request(`/market/price/${symbol}`),
-  getOHLCV: (symbol, period = '1M') => request(`/market/ohlcv/${symbol}?period=${period}`),
+  getOHLCV: (symbol, period = '1M', interval = null) => {
+    const params = new URLSearchParams({ period });
+    if (interval) params.set('interval', interval);
+    return request(`/market/ohlcv/${symbol}?${params.toString()}`);
+  },
   getSymbolInfo: (symbol) => request(`/market/info/${symbol}`),
   searchSymbols: (q) => request(`/market/search?q=${encodeURIComponent(q)}`),
   getPopularSymbols: () => request('/market/popular'),
@@ -104,7 +130,7 @@ export const api = {
   askAssistant: async (message) => unwrap(await request('/ai/assistant', { method: 'POST', body: JSON.stringify({ message }) })),
 };
 
-export const SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA'];
+export const SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'SPY', 'QQQ', 'DIA', 'IWM', 'BTC-USD', 'ETH-USD'];
 
 export const BROKERS = [
   { name: 'Alpaca', url: 'https://alpaca.markets', description: 'Commission-free stock trading API', logo: '🦙' },

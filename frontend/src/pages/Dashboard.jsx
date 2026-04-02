@@ -40,17 +40,22 @@ function SignalBadge({ signal }) {
 function MarketTicker({ onSelect }) {
   const [selected, setSelected] = useState('AAPL');
   const fetchPrices = async () => {
-    const results = await Promise.allSettled(
-      SYMBOLS.map((symbol) => api.getMarketPrice(symbol).then((payload) => [symbol, payload?.data || payload])),
-    );
+    try {
+      const results = await Promise.allSettled(
+        SYMBOLS.map((symbol) => api.getMarketPrice(symbol).then((payload) => [symbol, payload?.data || payload])),
+      );
 
-    return results.reduce((acc, result) => {
-      if (result.status === 'fulfilled') {
-        const [symbol, quote] = result.value;
-        acc[symbol] = quote;
-      }
-      return acc;
-    }, {});
+      return results.reduce((acc, result) => {
+        if (result.status === 'fulfilled') {
+          const [symbol, quote] = result.value;
+          acc[symbol] = quote;
+        }
+        return acc;
+      }, {});
+    } catch (error) {
+      console.error('Failed to fetch prices:', error);
+      return {}; // Return empty object on error
+    }
   };
 
   const { data: prices = {}, loading } = usePolling(fetchPrices, 12000);
@@ -58,7 +63,7 @@ function MarketTicker({ onSelect }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
       {SYMBOLS.map((symbol) => {
-        const quote = prices[symbol];
+        const quote = prices?.[symbol] || null;
         const positive = (quote?.change ?? 0) >= 0;
         return (
           <button
@@ -103,7 +108,8 @@ function MarketTicker({ onSelect }) {
 }
 
 function SignalStream({ symbol }) {
-  const { messages, status, reconnect } = useSignalStream(symbol, 24);
+  const { messages = [], status, reconnect } = useSignalStream(symbol, 24);
+  const safeMessages = Array.isArray(messages) ? messages : [];
   const meta = {
     [WS_STATUS.CONNECTED]: { label: 'Live', tone: 'text-emerald-400', dot: 'bg-emerald-400 animate-pulse' },
     [WS_STATUS.CONNECTING]: { label: 'Connecting', tone: 'text-amber-400', dot: 'bg-amber-400 animate-pulse' },
@@ -125,16 +131,16 @@ function SignalStream({ symbol }) {
             </button>
           ) : null}
         </div>
-        <span className="text-[10px] font-mono text-zinc-600">latest {Math.min(messages.length, 24)}</span>
+        <span className="text-[10px] font-mono text-zinc-600">latest {Math.min(safeMessages.length, 24)}</span>
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto">
-        {messages.length === 0 ? (
+        {safeMessages.length === 0 ? (
           <div className="flex h-full min-h-[16rem] items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 text-center text-sm text-zinc-500">
             {status === WS_STATUS.CONNECTING ? 'Connecting to the live signal engine...' : `Watching ${symbol} for fresh agent signals.`}
           </div>
         ) : (
-          messages.map((message, index) => (
+          safeMessages.map((message, index) => (
             <div
               key={`${message._ts}-${index}`}
               className={`rounded-2xl border px-3 py-3 font-mono text-xs ${
@@ -303,12 +309,13 @@ function TradeHistory() {
   const { isAuthenticated } = useAuth();
   const fetch = async () => (isAuthenticated ? api.getDemoTrades(20) : []);
   const { data: trades = [], loading } = usePolling(fetch, 12000);
+  const safeTrades = Array.isArray(trades) ? trades : [];
 
   if (!isAuthenticated) {
     return <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/35 px-4 py-6 text-sm text-zinc-500">Sign in to see your latest trades.</div>;
   }
 
-  if (loading && !trades.length) {
+  if (loading && !safeTrades.length) {
     return (
       <div className="space-y-3">
         {[...Array(5)].map((_, index) => <div key={index} className="skeleton h-12 w-full rounded-2xl" />)}
@@ -316,7 +323,7 @@ function TradeHistory() {
     );
   }
 
-  if (!trades.length) {
+  if (!safeTrades.length) {
     return <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/35 px-4 py-8 text-center text-sm text-zinc-500">No trades yet. Start from the market page to build your paper portfolio.</div>;
   }
 
@@ -334,7 +341,7 @@ function TradeHistory() {
           </tr>
         </thead>
         <tbody>
-          {trades.map((trade) => (
+          {safeTrades.map((trade) => (
             <tr key={trade.id} className="border-b border-zinc-900/70">
               <td className="py-3 pr-4 font-mono text-cyan-400">{trade.symbol}</td>
               <td className={`py-3 pr-4 font-mono ${trade.action === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}>{trade.action}</td>

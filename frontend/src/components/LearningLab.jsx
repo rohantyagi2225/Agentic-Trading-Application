@@ -57,7 +57,7 @@ export default function LearningLab({ initialSymbol = "AAPL", compact = false })
   const loadQuote = useCallback(async () => {
     try {
       const nextQuote = await api.getMarketPrice(symbol, "1D");
-      setQuote(nextQuote);
+      setQuote(nextQuote?.data || nextQuote);
     } catch {
       setQuote(null);
     }

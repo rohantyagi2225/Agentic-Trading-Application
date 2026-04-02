@@ -41,3 +41,7 @@ logs/
 # Docker volumes
 postgres_data/
 redis_data/
+agentic.db
+__pycache__/
+pytest-cache-files*
+.env
