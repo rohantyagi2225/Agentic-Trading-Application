@@ -1,18 +1,21 @@
-version: '3.8'
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   # =============================================================================
   # Main Application
   # =============================================================================
-  app:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: agentic-trading-app
+    container_name: agentic-trading-backend
     ports:
       - "8000:8000"
-      - "9090:9090"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/agentic
       - REDIS_URL=redis://redis:6379/0
@@ -26,18 +29,21 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./models:/app/models
+    init: true
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging: *default-logging
     networks:
       - agentic-network
 
@@ -53,15 +59,17 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
+    init: true
     restart: unless-stopped
+    stop_grace_period: 60s
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agentic"]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     networks:
       - agentic-network
 
@@ -76,12 +84,15 @@ services:
       - redis_data:/data
     ports:
       - "6379:6379"
+    init: true
     restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     networks:
       - agentic-network
 
@@ -95,52 +106,66 @@ services:
     container_name: agentic-frontend
     ports:
       - "3000:80"
+    init: true
     depends_on:
-      - app
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
     networks:
       - agentic-network
 
   # =============================================================================
-  # Monitoring (Prometheus - Optional)
+  # Prometheus Telemetry
   # =============================================================================
   prometheus:
     image: prom/prometheus:latest
     container_name: agentic-prometheus
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+    init: true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
     networks:
       - agentic-network
 
   # =============================================================================
-  # Grafana Dashboard (Optional)
+  # Grafana Dashboards
   # =============================================================================
   grafana:
     image: grafana/grafana:latest
     container_name: agentic-grafana
     volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
-      GF_USERS_ALLOW_SIGN_UP: false
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     ports:
       - "3001:3000"
+    init: true
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
     networks:
       - agentic-network
 
@@ -151,10 +176,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
     driver: local
 
 # =============================================================================

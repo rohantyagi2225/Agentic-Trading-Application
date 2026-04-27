@@ -9,8 +9,8 @@ export class ApiError extends Error {
 }
 
 const RETRYABLE_METHODS = new Set(['GET']);
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 500;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 800;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -24,7 +24,7 @@ function normalizePayload(payload) {
 
 async function request(path, options = {}, token = null, attempt = 0) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 30000);
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -37,7 +37,11 @@ async function request(path, options = {}, token = null, attempt = 0) {
     clearTimeout(timeout);
     if (!res.ok) {
       let errMsg = `HTTP ${res.status}`;
-      try { const body = await res.json(); errMsg = body.detail || body.message || errMsg; } catch {}
+      try { 
+        const body = await res.json(); 
+        const detail = body.detail || body.message || errMsg; 
+        errMsg = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      } catch {}
       const method = (options.method || 'GET').toUpperCase();
       if (res.status >= 500 && RETRYABLE_METHODS.has(method) && attempt < MAX_RETRIES) {
         await sleep(RETRY_DELAY_MS * (attempt + 1));
@@ -91,6 +95,7 @@ export const api = {
 
   // Market
   getMarketPrice: (symbol) => request(`/market/price/${symbol}`),
+  getMarketPrices: (symbols) => request(`/market/prices/bulk?symbols=${symbols.join(',')}`),
   getOHLCV: (symbol, period = '1M', interval = null) => {
     const params = new URLSearchParams({ period });
     if (interval) params.set('interval', interval);
@@ -99,6 +104,7 @@ export const api = {
   getSymbolInfo: (symbol) => request(`/market/info/${symbol}`),
   searchSymbols: (q) => request(`/market/search?q=${encodeURIComponent(q)}`),
   getPopularSymbols: () => request('/market/popular'),
+  getTechnicals: (symbol) => request(`/market/technicals/${symbol}`),
 
   // Signals
   getSignals: (symbol) => request(`/signals/${symbol}`),
@@ -115,6 +121,7 @@ export const api = {
   // Learning
   getLearningAccount: async () => unwrap(await authReq('/learning/account')),
   getLearningAgents: async () => unwrap(await request('/learning/agents')),
+  getLearningAgent: async (agentId) => unwrap(await request(`/learning/agents/${agentId}`)),
   executeLearningTrade: async (payload) => unwrap(await authReq('/learning/trade', { method: 'POST', body: JSON.stringify(payload) })),
 
   // Profile
@@ -124,13 +131,19 @@ export const api = {
   refillDemoBalance: async (mode = 'free') => unwrap(await authReq('/profile/refill', { method: 'POST', body: JSON.stringify({ mode }) })),
 
   // Agents
-  executeAgent: (payload) => authReq('/agents/execute', { method: 'POST', body: JSON.stringify(payload) }),
+  executeAgent: (payload) => {
+    const token = getToken();
+    if (token) {
+      return request('/agents/execute', { method: 'POST', body: JSON.stringify(payload) }, token);
+    }
+    return request('/agents/execute', { method: 'POST', body: JSON.stringify(payload) });
+  },
 
   // AI assistant
   askAssistant: async (message) => unwrap(await request('/ai/assistant', { method: 'POST', body: JSON.stringify({ message }) })),
 };
 
-export const SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'SPY', 'QQQ', 'DIA', 'IWM', 'BTC-USD', 'ETH-USD'];
+export const SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'SPY', 'QQQ', 'DIA', 'IWM', 'VIX', 'BTC-USD', 'ETH-USD', 'TATASTEEL.NS'];
 
 export const BROKERS = [
   { name: 'Alpaca', url: 'https://alpaca.markets', description: 'Commission-free stock trading API', logo: '🦙' },
@@ -147,7 +160,7 @@ export function getMockPriceHistory(symbol, days = 60) {
   const points = [];
   let open = base;
   for (let i = days; i >= 0; i--) {
-    const change = open * (0.0003 + (rand() - 0.48) * 0.018);
+    const change = open * ((rand() - 0.5) * 0.015);
     const close = open + change;
     const high = Math.max(open, close) * (1 + rand() * 0.008);
     const low = Math.min(open, close) * (1 - rand() * 0.008);

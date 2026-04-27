@@ -80,8 +80,36 @@ function AgentCard({ agent, onExecute }) {
       </div>
 
       {result ? (
-        <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-mono ${state === 'error' ? 'border-red-500/25 bg-red-500/8 text-red-300' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-300'}`}>
-          {typeof result === 'object' ? JSON.stringify(result) : String(result)}
+        <div className={`mt-4 rounded-2xl border px-4 py-4 ${state === 'error' ? 'border-red-500/25 bg-red-500/8 text-red-300' : 'border-emerald-500/25 bg-emerald-500/8'}`}>
+          {state === 'error' ? (
+            <div className="text-sm font-mono">{String(result)}</div>
+          ) : (
+            <div className="space-y-3">
+               <div className="flex items-center justify-between border-b border-emerald-500/10 pb-2">
+                 <span className="text-xs font-mono text-emerald-500/70 uppercase">Agent Prediction & Actions</span>
+                 {result?.signal?.signal && (
+                   <span className={`px-2 py-0.5 rounded text-xs font-bold ${result.signal.signal === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' : result.signal.signal === 'SELL' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                     {result.signal.signal} {result?.signal?.symbol || agent.symbol || ''}
+                   </span>
+                 )}
+               </div>
+               <div>
+                  <div className="text-sm text-emerald-100">{result?.signal?.explanation || 'Successfully executed strategy.'}</div>
+               </div>
+               {(result?.signal?.price != null || result?.signal?.confidence != null) && (
+                 <div className="flex items-center gap-4 text-xs font-mono text-emerald-400/60 pt-1">
+                   {result.signal.price != null && <span>Price: ${Number(result.signal.price).toFixed(2)}</span>}
+                   {result.signal.confidence != null && <span>Confidence: {(result.signal.confidence * 100).toFixed(0)}%</span>}
+                 </div>
+               )}
+               {result?.executed_trade?.status && (
+                 <div className="mt-2 pt-2 border-t border-emerald-500/10 text-xs text-emerald-400/80">
+                   ↳ Trade outcome: <span className="uppercase">{result.executed_trade.status}</span> 
+                   {result.executed_trade.execution_mode ? ` (${result.executed_trade.execution_mode})` : ''}
+                 </div>
+               )}
+            </div>
+          )}
         </div>
       ) : null}
     </article>
@@ -90,20 +118,34 @@ function AgentCard({ agent, onExecute }) {
 
 export default function Agents() {
   const [agents, setAgents] = useState([]);
+  const [symbol, setSymbol] = useState('AAPL');
+  const [quantity, setQuantity] = useState('1');
+  const [executionMode, setExecutionMode] = useState('paper');
 
   useEffect(() => {
     api.getLearningAgents().then(setAgents).catch(() => setAgents([]));
   }, []);
 
-  const execute = useCallback((agent) => api.executeAgent({ agent_id: agent.id, strategy: agent.strategy }), []);
+  const execute = useCallback(
+    (agent) =>
+      api.executeAgent({
+        agent_id: agent.id,
+        strategy: agent.strategy,
+        symbol: symbol.trim().toUpperCase() || 'AAPL',
+        quantity: Math.max(Number(quantity) || 1, 0.0001),
+        execute_trade: true,
+        execution_mode: executionMode,
+      }),
+    [executionMode, quantity, symbol],
+  );
 
   const summary = useMemo(
     () => [
       { label: 'Agents', value: `${agents.length || 6}`, sub: 'Interactive strategy modules' },
       { label: 'Use case', value: 'Education first', sub: 'Every agent comes with a why' },
-      { label: 'Mode', value: 'Demo safe', sub: 'No real broker execution' },
+      { label: 'Mode', value: executionMode === 'live' ? 'Live broker route' : 'Paper route', sub: 'Signals use live provider quotes' },
     ],
-    [agents.length],
+    [agents.length, executionMode],
   );
 
   return (
@@ -128,6 +170,49 @@ export default function Agents() {
                 </div>
               ))}
             </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_140px_190px]">
+              <div className="relative">
+                <input
+                  list="symbol-options"
+                  value={symbol}
+                  onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-500"
+                  placeholder="Symbol (e.g. AAPL)"
+                />
+                <datalist id="symbol-options">
+                  <option value="AAPL">Apple Inc.</option>
+                  <option value="NVDA">NVIDIA Corp.</option>
+                  <option value="TSLA">Tesla Inc.</option>
+                  <option value="MSFT">Microsoft Corp.</option>
+                  <option value="BTC-USD">Bitcoin</option>
+                  <option value="ETH-USD">Ethereum</option>
+                  <option value="RELIANCE.NS">Reliance Industries</option>
+                  <option value="TATASTEEL.NS">Tata Steel</option>
+                  <option value="SPY">S&P 500 ETF</option>
+                  <option value="VIX">CBOE Volatility Index</option>
+                </datalist>
+              </div>
+              <input
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                type="number"
+                min="0.0001"
+                step="0.1"
+                className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-500"
+                placeholder="Quantity"
+              />
+              <select
+                value={executionMode}
+                onChange={(event) => setExecutionMode(event.target.value)}
+                className="rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-500"
+              >
+                <option value="paper">Paper execution</option>
+                <option value="live">Live broker execution</option>
+              </select>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              Live mode is safety-gated server-side. If disabled or credentials are missing, the API returns a controlled rejection without crashing.
+            </p>
           </div>
 
           <div className="rounded-[26px] border border-zinc-800/80 bg-zinc-950/45 p-5">
@@ -135,7 +220,7 @@ export default function Agents() {
             <div className="space-y-3 text-sm text-zinc-400">
               <p>1. Read the agent brief.</p>
               <p>2. Confirm you understand the crux.</p>
-              <p>3. Execute in demo mode to see how the system responds.</p>
+              <p>3. Execute against live market quotes to see how the system responds.</p>
               <p>4. Compare the output with the dashboard signal stream and the market detail page.</p>
             </div>
           </div>

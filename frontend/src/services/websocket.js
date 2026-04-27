@@ -2,17 +2,38 @@ export function resolveWsBase() {
   const configured = import.meta.env.VITE_WS_URL;
   if (configured) {
     if (configured.startsWith('ws://') || configured.startsWith('wss://')) {
-      return configured.replace(/\/$/, '');
+      try {
+        const parsed = new URL(configured);
+        const path = (parsed.pathname || '/').replace(/\/+$/, '');
+        if (!path || path === '' || path === '/') {
+          parsed.pathname = '/ws';
+        } else if (path.endsWith('/signals') || path === '/signals') {
+          parsed.pathname = '/ws';
+        } else if (path.endsWith('/ws')) {
+          parsed.pathname = path;
+        } else {
+          parsed.pathname = `${path}/ws`;
+        }
+        return parsed.toString().replace(/\/$/, '');
+      } catch {
+        const trimmed = configured.replace(/\/$/, '');
+        return trimmed.endsWith('/ws') ? trimmed : `${trimmed}/ws`;
+      }
     }
     if (configured.startsWith('/')) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}${configured}`.replace(/\/$/, '');
+      const trimmed = configured.replace(/\/$/, '');
+      const path = trimmed.endsWith('/ws') ? trimmed : `${trimmed}/ws`;
+      return `${protocol}//${window.location.host}${path}`;
     }
   }
 
   if (typeof window !== 'undefined') {
+    // In development (Vite dev server on port 3000), proxy /ws to backend
+    // In production, use same host
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws`;
+    const host = window.location.host; // e.g. localhost:3000
+    return `${protocol}//${host}/ws`; // Vite proxies /ws -> ws://127.0.0.1:8000
   }
 
   return 'ws://127.0.0.1:8000/ws';
@@ -31,13 +52,14 @@ export const WS_STATUS = {
 
 export class SignalWebSocket {
   constructor(symbol, onMessage, onStatusChange) {
-    this.symbol = symbol;
+    const raw = decodeURIComponent(String(symbol ?? '').trim());
+    this.symbol = raw === '^VIX' || raw === '%5EVIX' ? 'VIX' : raw;
     this.onMessage = onMessage;
     this.onStatusChange = onStatusChange;
     this.ws = null;
     this.reconnectTimer = null;
     this.attempts = 0;
-    this.maxAttempts = 8;
+    this.maxAttempts = 15;
     this.active = true;
     this._status = WS_STATUS.IDLE;
   }
@@ -52,7 +74,7 @@ export class SignalWebSocket {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this._setStatus(WS_STATUS.CONNECTING);
     try {
-      this.ws = new WebSocket(`${WS_BASE}/signals/${this.symbol}`);
+      this.ws = new WebSocket(`${WS_BASE}/signals/${encodeURIComponent(this.symbol)}`);
     } catch {
       this._setStatus(WS_STATUS.ERROR);
       this._scheduleReconnect();
