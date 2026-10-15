@@ -1,344 +1,106 @@
 # Agentic Trading Application
-This project was collaboratively developed as part of a team effort to build a production-grade multi-agent trading system.
 
-A **production-grade multi-agent trading platform** that extends the research framework introduced in the Open Finance Lab project **AgenticTrading** into a deployable system with real-time APIs, streaming infrastructure, analytics, and a web dashboard.
+A collaborative project exploring a multi-agent architecture for financial-market research, signal generation, risk checks, portfolio analytics, and historical strategy evaluation. This repository builds on concepts from the Open Finance Lab **AgenticTrading** research framework and combines backend services with a web dashboard and supporting infrastructure.
 
-This project builds on the concept of **Agentic Trading (AGT)** — where financial trading workflows are executed by collaborating intelligent agents rather than static pipelines.
+> **Research and simulation only.** This software is not investment advice. Do not connect it to a live brokerage account or use it for real-money trading without independent security, risk, and financial validation.
 
----
+## Project overview
 
-# Attribution
+Traditional algorithmic workflows often pass data through fixed sequential stages. An agentic approach separates responsibilities into specialized agents and coordinates their outputs through an orchestration and risk layer.
 
-This project is **inspired by and based on research from the Open Finance Lab AgenticTrading framework**.
+### System architecture
 
-Original research project:
-AgenticTrading — Open Finance Lab
+```mermaid
+flowchart LR
+    A[Market data] --> B[Signal agents]
+    B --> C[Orchestrator]
+    C --> D[Risk engine]
+    D --> E[Execution / simulation]
+    E --> F[Portfolio state]
+    F --> G[Analytics and backtesting]
+    C --> H[REST API]
+    H --> I[React dashboard]
+    J[(PostgreSQL)] <--> H
+    K[(Redis)] <--> H
+```
 
-The original system introduces the concept of **Agentic Trading**, where trading pipelines are modeled as coordinated multi-agent systems.
+This diagram is a conceptual overview of the repository's intended workflow, not a guarantee that every component is fully integrated or production-ready.
 
-This repository **extends that research implementation** by adding:
+## Core areas
 
-* production-ready backend services
-* REST APIs
-* real-time WebSocket streaming
-* portfolio management
-* analytics engine
-* backtesting infrastructure
-* Dockerized deployment
-* React trading dashboard
+- **Agent workflows:** specialized signal, risk, portfolio, and execution responsibilities
+- **Orchestration:** coordinates agent activity and validates signals
+- **Risk controls:** position/exposure checks and risk-oriented safeguards
+- **Market data:** market-price and historical-data integration
+- **Backtesting and analytics:** strategy evaluation and measures such as Sharpe ratio, volatility, and maximum drawdown
+- **API and streaming:** FastAPI-style REST endpoints and WebSocket signal streams
+- **Web dashboard:** React/Vite/Tailwind frontend
+- **Infrastructure:** Docker Compose, PostgreSQL, Redis, and optional Prometheus/Grafana monitoring
 
-The goal is to evolve the research prototype into a **practical engineering system for experimentation and deployment**.
+## Technology stack
 
----
+| Layer | Technologies |
+|---|---|
+| Backend/API | Python, FastAPI |
+| Frontend | React, Vite, Tailwind CSS |
+| Data/services | PostgreSQL, Redis, SQLAlchemy |
+| Streaming | WebSockets |
+| Deployment | Docker, Docker Compose |
+| Monitoring | Prometheus, Grafana |
 
-# Overview
+Refer to the implementation and configuration files for the current state of each component.
 
-Traditional **Algorithmic Trading (AT)** pipelines operate as fixed sequential modules:
+## Run with Docker Compose
 
-Data → Signal Generation → Portfolio Optimization → Execution
+1. Clone the repository:
 
-While effective, these pipelines lack adaptability and cross-module learning.
+   ```bash
+   git clone https://github.com/rohantyagi2225/Agentic-Trading-Application.git
+   cd Agentic-Trading-Application
+   ```
 
-**Agentic Trading (AGT)** introduces a new paradigm where:
+2. Create a local `.env` file based on `.env.example` and review the values. Do not commit credentials or API keys.
 
-* each trading component is implemented as an **intelligent agent**
-* agents communicate and collaborate
-* orchestration manages workflow execution
-* memory and analytics allow continual learning
+3. Start the services:
 
-This repository implements that concept using modern backend and frontend technologies.
+   ```bash
+   docker compose up --build
+   ```
 
----
+4. When services are healthy, check the API documentation at [http://localhost:8000/docs](http://localhost:8000/docs). The Compose file also configures the frontend at port 3000 and monitoring services on their configured ports.
 
-# System Architecture
+Startup may require local configuration or debugging depending on the environment. Review the Compose file and project documentation before exposing any service publicly.
 
-The platform consists of three major layers.
+## Example API surface
 
-## Agent Layer
+The README documents routes for:
 
-Autonomous agents responsible for trading intelligence.
+- `GET /health` — health check
+- `GET /market/price/{symbol}` — market price
+- `GET /signals/{symbol}` — signal retrieval
+- `GET /portfolio/metrics` — portfolio metrics
+- `POST /backtest` — start a backtest
+- `POST /agents/execute` — agent execution
 
-Examples:
+Check the running API's OpenAPI documentation for the current route availability and request schemas.
 
-* Signal generation agents
-* Risk management agents
-* Execution agents
-* Portfolio agents
+## Evaluation and risk considerations
 
-Each agent performs a specialized role in the trading pipeline.
+A credible trading evaluation should use out-of-sample or walk-forward tests, realistic transaction costs and slippage, drawdown analysis, and checks against look-ahead bias and data leakage. Do not report illustrative or historical test figures as verified live performance. A backtest is not a guarantee of future results.
 
----
+## Attribution and contribution
 
-## Orchestration Layer
+This project is inspired by the Open Finance Lab **AgenticTrading** research framework. Review the repository's license and upstream terms when reusing or redistributing code.
 
-This layer coordinates agents and trading workflows.
+**Rohan Tyagi's stated contribution:** research, documentation, system analysis, feature explanation, and workflow structuring as part of a collaborative team project.
 
-Core components include:
+## Limitations
 
-* Agent Manager
-* Risk Engine
-* Execution Engine
-* Market Data Provider
+- The repository contains multiple services and requires configuration; not every feature should be assumed production-ready merely because infrastructure files are present.
+- Live market-data availability, API credentials, database setup, and frontend/backend integration can affect local execution.
+- Security review, reproducible tests, deployment hardening, and independent financial validation are required before any real-world use.
+- Use paper trading or offline simulation for experimentation; never expose credentials in source control.
 
-Responsibilities include:
+## License
 
-* agent registration
-* strategy orchestration
-* signal validation
-* risk enforcement
-* trade execution
-
----
-
-## API & Infrastructure Layer
-
-The trading system is exposed through REST APIs and WebSocket streams.
-
-Technologies used:
-
-* FastAPI
-* PostgreSQL
-* Redis
-* SQLAlchemy
-* WebSockets
-* Docker
-
----
-
-# Backend Stack
-
-FastAPI — high-performance API framework
-PostgreSQL — trade and portfolio database
-Redis — caching and signal streaming
-SQLAlchemy — ORM
-WebSockets — real-time signal feeds
-Docker — containerized deployment
-
----
-
-# Frontend Stack
-
-React — trading dashboard
-Vite — frontend tooling
-TailwindCSS — UI framework
-
----
-
-# Core Features
-
-## Multi-Agent Signal Generation
-
-Different agents generate trading signals using various strategies.
-
-Examples:
-
-* momentum agents
-* mean-reversion agents
-* factor-based models
-* LLM-assisted strategy agents
-
----
-
-## Risk-Managed Execution
-
-Before executing trades the system validates risk constraints:
-
-signal → risk engine → execution engine
-
-Risk checks include:
-
-* position limits
-* exposure constraints
-* portfolio risk thresholds
-
----
-
-## Portfolio Management
-
-Tracks and evaluates portfolio state.
-
-Metrics include:
-
-* portfolio value
-* positions
-* exposure
-* performance statistics
-
-Endpoint:
-
-GET /portfolio/metrics
-
----
-
-## Real-Time Signal Streaming
-
-Signals can be streamed live via WebSockets.
-
-Example:
-
-ws://localhost:8000/ws/signals/AAPL
-
-This powers the real-time trading dashboard.
-
----
-
-## Market Data Integration
-
-Market prices are provided through a market data service.
-
-Endpoint:
-
-GET /market/price/{symbol}
-
----
-
-## Analytics Engine
-
-Portfolio analytics include:
-
-* Sharpe ratio
-* volatility
-* max drawdown
-* alpha / beta
-
----
-
-## Backtesting Engine
-
-Strategies can be evaluated against historical data.
-
-Endpoints:
-
-POST /backtest
-GET /backtest/{id}
-
----
-
-# API Endpoints
-
-Signals
-
-GET /signals/{symbol}
-
-Portfolio
-
-GET /portfolio/metrics
-
-Market Data
-
-GET /market/price/{symbol}
-
-Agent Execution
-
-POST /agents/execute
-
-Health Check
-
-GET /health
-
----
-
-# WebSocket Streams
-
-Live signal stream
-
-/ws/signals/{symbol}
-
-Example
-
-ws://localhost:8000/ws/signals/AAPL
-
----
-
-# Project Structure
-
-AgenticTrading
-
-backend
-│
-├── api
-├── routes
-├── services
-├── db
-├── risk
-├── market
-├── schemas
-└── config
-
-core
-└── agents
-
-frontend
-├── src
-│   ├── components
-│   ├── pages
-│   └── services
-
-docker-compose.yml
-Dockerfile
-
----
-
-# Running the System
-
-Clone the repository
-
-git clone https://github.com/Anshgulati090/Agentic-Trading-Application.git
-
-cd Agentic-Trading-Application
-
-Start services
-
-docker-compose up --build
-
-Backend API
-
-http://localhost:8000/docs
-
-Frontend dashboard
-
-http://localhost:3000
-
----
-
-# Roadmap
-
-Planned improvements:
-
-* Redis-based agent memory
-* advanced analytics engine
-* reinforcement learning agents
-* distributed agent execution
-* live broker integration
-* CI/CD pipelines
-
----
-
-# License
-
-This repository follows the license terms of the original AgenticTrading project unless otherwise specified.
-
----
-
-# Acknowledgment
-
-Original concept and research inspiration from the Open Finance Lab AgenticTrading project.
-
-This repository expands the research framework into a **production-oriented multi-agent trading infrastructure**.
-
----
-
-##  Authors
-
-Ansh Gulati — Core Development  
-Rohan Tyagi — Research, Documentation & System Analysis  
-
----
-
-## My Contribution (Rohan Tyagi)
-
-- Contributed to project understanding and system design analysis  
-- Worked on documentation and structuring of the project  
-- Assisted in feature explanation and system workflow breakdown  
-- Collaborated with team members during development  
-
+See the repository's `LICENSE` file and the upstream AgenticTrading project's license terms.
